@@ -1,0 +1,9 @@
+{
+  "domain": "ga014",
+  "name": "ga014",
+  "version": "0.1.1",
+  "documentation": "",
+  "dependencies": [],
+  "codeowners": [],
+  "requirements": ["requests"]
+}
