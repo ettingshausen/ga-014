@@ -4,6 +4,7 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.const import (CONF_HOST,ATTR_NAME,EVENT_HOMEASSISTANT_START,EVENT_HOMEASSISTANT_STOP)
 from custom_components.ga014.ga014 import *
 #from homeassistant.core import (ServiceRegistry)
+from homeassistant.helpers.discovery import load_platform
 
 import logging
 _LOGGER = logging.getLogger(__name__)
@@ -26,5 +27,6 @@ def setup(hass, config):
     
     status=hass.data['ga014']._status
     for key in status.keys():
-        hass.helpers.discovery.load_platform('climate','ga014',{'id':key,'name':status[key]['name']}, config)
+        #hass.helpers.discovery.load_platform('climate','ga014',{'id':key,'name':status[key]['name']}, config)
+        load_platform(hass, 'climate', 'ga014', {'id': key, 'name': status[key]['name']}, config)
     return True        

@@ -6,10 +6,8 @@ import voluptuous as vol
 
 from homeassistant.components.climate import (ClimateEntity, PLATFORM_SCHEMA)
 from homeassistant.components.climate.const import (
-    ATTR_HVAC_MODE, HVAC_MODE_COOL, HVAC_MODE_DRY, HVAC_MODE_FAN_ONLY,
-    HVAC_MODE_HEAT, SUPPORT_FAN_MODE, HVAC_MODE_AUTO, HVAC_MODE_OFF,
-    SUPPORT_TARGET_TEMPERATURE,SUPPORT_SWING_MODE,SUPPORT_AUX_HEAT)
-from homeassistant.const import (CONF_NAME, CONF_HOST, CONF_PORT,TEMP_CELSIUS, ATTR_TEMPERATURE,STATE_ON,STATE_OFF)
+    ATTR_HVAC_MODE, HVACMode, ClimateEntityFeature, HVACAction)
+from homeassistant.const import (CONF_NAME, CONF_HOST, CONF_PORT,UnitOfTemperature, ATTR_TEMPERATURE,STATE_ON,STATE_OFF)
 import homeassistant.helpers.config_validation as cv
 import requests
 
@@ -19,7 +17,8 @@ from datetime import timedelta
 SCAN_INTERVAL = timedelta(seconds=1)
 
 #工作模式
-MODE_HVAC={0:HVAC_MODE_OFF,1:HVAC_MODE_FAN_ONLY,2:HVAC_MODE_COOL,3:HVAC_MODE_HEAT,4:HVAC_MODE_AUTO,5:HVAC_MODE_DRY}
+MODE_HVAC={0:HVACMode.OFF,1:HVACMode.FAN_ONLY,2:HVACMode.COOL,3:HVACMode.HEAT,4:HVACMode.AUTO,5:HVACMode.DRY}
+ACTION_HVAC={0:HVACAction.OFF,1:HVACAction.FAN,2:HVACAction.COOLING,3:HVACAction.HEATING,4:HVACAction.IDLE,5:HVACAction.DRYING}
 #风力模式 #修改后可适配homekit
 # MODE_FAN ={0:'关',1:'一档风',2:'二档风', 3:'三档风', 4:'四档风', 5:'五档风', 6:'六档风', 7:'七档风',8:'自动风'}
 MODE_FAN ={0:'off',1:'low',2:'higher low', 3:'middle', 4:'really middle', 5:'medium', 6:'lower high', 7:'high',8:'auto'}
@@ -48,6 +47,7 @@ class Thermostat(ClimateEntity):
         self._room_temp=0
         self._set_temp=0
         self._run_mode=0
+        self._run_action=0
         self._fan_speed=0
         self._max_temp=30
         self._min_temp=17
@@ -62,7 +62,8 @@ class Thermostat(ClimateEntity):
     @property
     def supported_features(self):
         """Return the list of supported features."""
-        return (SUPPORT_TARGET_TEMPERATURE|SUPPORT_FAN_MODE|SUPPORT_SWING_MODE|SUPPORT_AUX_HEAT)
+        return (ClimateEntityFeature.TARGET_TEMPERATURE|ClimateEntityFeature.FAN_MODE|ClimateEntityFeature.SWING_MODE|ClimateEntityFeature.TURN_OFF|ClimateEntityFeature.TURN_ON)
+        # return (ClimateEntityFeature.TARGET_TEMPERATURE|ClimateEntityFeature.FAN_MODE|ClimateEntityFeature.SWING_MODE|ClimateEntityFeature.AUX_HEAT)
 
     @property
     def should_poll(self):
@@ -76,6 +77,7 @@ class Thermostat(ClimateEntity):
         self._room_temp=float(status['room_temp'])
         self._set_temp=float(status['cool_temp_set'])
         self._run_mode=int(status['run_mode'])
+        self.set_hvac_action()
         self._swing=int(status['is_swing'])
         self._aux=(int(status['is_elec_heat'])>0)
         if int(status['is_auto_fan'])!=0:
@@ -107,7 +109,7 @@ class Thermostat(ClimateEntity):
     @property
     def temperature_unit(self):
         """Return the unit of measurement."""
-        return TEMP_CELSIUS
+        return UnitOfTemperature.CELSIUS
 
     #当前室温
     @property
@@ -133,6 +135,22 @@ class Thermostat(ClimateEntity):
         else:
             self._run_mode=3        
         self._hass.data['ga014'].set_status(self._id,self._run_mode,self._fan_speed,self._set_temp,self._aux,self._swing)
+ 
+    # 与HVAC_MODE不同，这里返回的是当前状态，例如有时空调会停止运行，因为此时已经达到目标温度，所以返回IDLE
+    # 这个参数对于HomeKit显示空调状态是必要的
+    @property
+    def hvac_action(self):
+        return ACTION_HVAC[self._run_action]
+        
+    def set_hvac_action(self):
+        self._run_action=self._run_mode
+        if self._run_mode==2:
+            if self._room_temp<=self._set_temp:
+                self._run_action=4
+        elif self._run_mode==3:
+            if self._room_temp>=self._set_temp:
+                self._run_action=4
+
 
     #工作模式列表
     @property
@@ -191,22 +209,22 @@ class Thermostat(ClimateEntity):
         
 
 
-
-    @property
-    def is_aux_heat(self):
-        return self._aux
+    # HA 2024.4.0 电辅热被deprecated了
+    # @property
+    # def is_aux_heat(self):
+    #     return self._aux
         
-    def turn_aux_heat_on(self):
-        if self._run_mode>0:
-            self.time_start=time.time()
-            self._aux = True
-            self._hass.data['ga014'].set_status(self._id,self._run_mode,self._fan_speed,self._set_temp,self._aux,self._swing)
+    # def turn_aux_heat_on(self):
+    #     if self._run_mode>0:
+    #         self.time_start=time.time()
+    #         self._aux = True
+    #         self._hass.data['ga014'].set_status(self._id,self._run_mode,self._fan_speed,self._set_temp,self._aux,self._swing)
 
-    def turn_aux_heat_off(self):
-        if self._run_mode>0:
-            self.time_start=time.time()
-            self._aux = False
-            self._hass.data['ga014'].set_status(self._id,self._run_mode,self._fan_speed,self._set_temp,self._aux,self._swing)
+    # def turn_aux_heat_off(self):
+    #     if self._run_mode>0:
+    #         self.time_start=time.time()
+    #         self._aux = False
+    #         self._hass.data['ga014'].set_status(self._id,self._run_mode,self._fan_speed,self._set_temp,self._aux,self._swing)
         
     @property
     def swing_modes(self):
