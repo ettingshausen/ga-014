@@ -14,6 +14,7 @@ class GA014(threading.Thread):
         self._names=[]
         self._status={}
         self._last_success=0.0
+        self._last_name_attempt=0.0
         self.get_name()
         self.get_status()
         # The gateway is sometimes slow to answer; retry so that entities are
@@ -34,6 +35,7 @@ class GA014(threading.Thread):
         return (time.time() - self._last_success) < 120
 
     def get_name(self):
+        self._last_name_attempt=time.time()
         url1 = 'http://{0}/protocol.csp?fname=485&opt=getroomlist&function=get'
         try:
             r= requests.get(url1.format(self._host), timeout = 5)
@@ -56,12 +58,22 @@ class GA014(threading.Thread):
         # _LOGGER.error(jd)
         if jd['arg']!='':
             aclist=json.loads(jd['arg'])['aclist']
+            # The room-name request can fail independently; retry it at most
+            # once a minute so names do not stay empty forever.
+            if not self._names and time.time()-self._last_name_attempt > 60:
+                self.get_name()
             for ac in aclist:
                 addr=int(ac['addr'])
+                name=''
                 if addr < len(self._names):
-                    ac['name']=self._names[addr]['name']
-                else:
-                    ac.setdefault('name','内机%s' % addr)
+                    name=(self._names[addr].get('name') or '').strip()
+                if not name:
+                    name=(ac.get('name') or '').strip()
+                if not name:
+                    name=((self._status.get(addr) or {}).get('name') or '').strip()
+                if not name:
+                    name='内机%s' % addr
+                ac['name']=name
                 self._status[addr]=ac
             self._last_success=time.time()
         return True
