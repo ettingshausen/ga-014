@@ -69,6 +69,12 @@ class Thermostat(ClimateEntity):
     def should_poll(self):
         return True
 
+    @property
+    def available(self):
+        """Return True when the gateway is reachable."""
+        gw = self._hass.data.get('ga014')
+        return bool(gw and gw.available)
+
     def update(self):
         if time.time()-self.time_start<10:
             return;

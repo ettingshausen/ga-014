@@ -27,6 +27,7 @@ def setup(hass, config):
     
     status=hass.data['ga014']._status
     for key in status.keys():
-        #hass.helpers.discovery.load_platform('climate','ga014',{'id':key,'name':status[key]['name']}, config)
-        load_platform(hass, 'climate', 'ga014', {'id': key, 'name': status[key]['name']}, config)
+        discovery_info = {'id': key, 'name': status[key]['name']}
+        load_platform(hass, 'climate', 'ga014', discovery_info, config)
+        load_platform(hass, 'sensor', 'ga014', discovery_info, config)
     return True        

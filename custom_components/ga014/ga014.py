@@ -13,10 +13,25 @@ class GA014(threading.Thread):
         self._host= host
         self._names=[]
         self._status={}
+        self._last_success=0.0
         self.get_name()
         self.get_status()
+        # The gateway is sometimes slow to answer; retry so that entities are
+        # still created when the first request times out.
+        for _ in range(3):
+            if self._status:
+                break
+            time.sleep(2)
+            if not self._names:
+                self.get_name()
+            self.get_status()
         self._run = False
         self._lock = threading.Lock()
+
+    @property
+    def available(self):
+        """Return True when the gateway answered recently."""
+        return (time.time() - self._last_success) < 120
 
     def get_name(self):
         url1 = 'http://{0}/protocol.csp?fname=485&opt=getroomlist&function=get'
@@ -43,8 +58,12 @@ class GA014(threading.Thread):
             aclist=json.loads(jd['arg'])['aclist']
             for ac in aclist:
                 addr=int(ac['addr'])
-                ac['name']=self._names[addr]['name']
+                if addr < len(self._names):
+                    ac['name']=self._names[addr]['name']
+                else:
+                    ac.setdefault('name','内机%s' % addr)
                 self._status[addr]=ac
+            self._last_success=time.time()
         return True
         
     def set_status(self,id,hvac,fan,temp,aux,swing):
